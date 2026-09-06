@@ -23,6 +23,6 @@ export function certificationSummary(checks: CertificationCheck[]) {
   const warnings = checks.filter(c => c.status === "WARN");
   const passed = checks.filter(c => c.status === "PASS");
   const blockingWarnings = warnings.filter(c => c.blocking);
-  const certified = blocked.length === 0 && blockingWarnings.length === 0;
+  const certified = checks.length > 0 && blocked.length === 0 && blockingWarnings.length === 0;
   return { total: checks.length, passed: passed.length, warnings: warnings.length, blocked: blocked.length, blockingWarnings: blockingWarnings.length, certified };
 }
