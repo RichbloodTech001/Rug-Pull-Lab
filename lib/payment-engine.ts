@@ -1,0 +1,57 @@
+export type PaymentKind = "DEPOSIT" | "WITHDRAWAL" | "FEE" | "ADJUSTMENT";
+export type PaymentStatus = "PENDING" | "PROCESSING" | "AWAITING_APPROVAL" | "CONFIRMED" | "FAILED" | "CANCELLED" | "REVERSED";
+
+const transitions: Record<PaymentStatus, PaymentStatus[]> = {
+  PENDING: ["PROCESSING", "AWAITING_APPROVAL", "CANCELLED"],
+  PROCESSING: ["CONFIRMED", "FAILED", "AWAITING_APPROVAL"],
+  AWAITING_APPROVAL: ["PROCESSING", "CANCELLED", "FAILED"],
+  CONFIRMED: ["REVERSED"],
+  FAILED: [],
+  CANCELLED: [],
+  REVERSED: [],
+};
+
+export type PaymentRequest = {
+  userId: string;
+  accountId: string;
+  kind: PaymentKind;
+  amountMinor: bigint;
+  feeMinor?: bigint;
+  currency: string;
+  idempotencyKey: string;
+};
+
+export function validatePaymentRequest(request: PaymentRequest) {
+  if (!request.userId.trim() || !request.accountId.trim()) throw new Error("User and financial account are required.");
+  if (request.amountMinor <= 0n) throw new Error("Payment amount must be positive.");
+  if ((request.feeMinor ?? 0n) < 0n) throw new Error("Fee cannot be negative.");
+  if (!/^[A-Z0-9._-]{2,16}$/.test(request.currency.toUpperCase())) throw new Error("Invalid currency code.");
+  if (!request.idempotencyKey.trim()) throw new Error("Idempotency key is required.");
+}
+
+export function canTransition(from: PaymentStatus, to: PaymentStatus) {
+  return transitions[from].includes(to);
+}
+
+export function transitionPayment(from: PaymentStatus, to: PaymentStatus) {
+  if (!canTransition(from, to)) throw new Error(`Invalid payment transition: ${from} → ${to}.`);
+  return to;
+}
+
+export function feeAmount(amountMinor: bigint, basisPoints: bigint) {
+  if (amountMinor < 0n || basisPoints < 0n) throw new Error("Amount and fee basis points cannot be negative.");
+  return (amountMinor * basisPoints + 9_999n) / 10_000n;
+}
+
+export function demoPayment(kind: PaymentKind, amountMinor: bigint, currency: string) {
+  const request: PaymentRequest = {
+    userId: "research-user",
+    accountId: "research-account",
+    kind,
+    amountMinor,
+    currency: currency.toUpperCase(),
+    idempotencyKey: `research:${crypto.randomUUID()}`,
+  };
+  validatePaymentRequest(request);
+  return { ...request, status: "PENDING" as PaymentStatus, feeMinor: feeAmount(amountMinor, 25) };
+}
