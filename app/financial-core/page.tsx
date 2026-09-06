@@ -16,8 +16,8 @@ export default function FinancialCorePage() {
     try {
       const value = BigInt(amount);
       assertBalanced([
-        { accountId: "cash", amountMinor: value, currency },
-        { accountId: "customer", amountMinor: value, currency },
+        { accountId: "cash", amountMinor: value, currency, direction: "DEBIT" },
+        { accountId: "customer", amountMinor: value, currency, direction: "CREDIT" },
       ]);
       setEntries(2);
       setMessage(`Balanced research journal validated: ${value.toString()} minor units ${currency}.`);
@@ -28,11 +28,11 @@ export default function FinancialCorePage() {
   }
 
   return <main className="main">
-    <div className="topbar"><div><div className="eyebrow">Phase 12 · PostgreSQL Financial Core</div><h1>Financial Core</h1></div><div className="status"><span className="dot" /> DATABASE SCHEMA · READY</div></div>
+    <div className="topbar"><div><div className="eyebrow">Phase 12 · PostgreSQL Financial Core</div><h1>Financial Core</h1></div><div className="status"><span className="dot" /> DOUBLE-ENTRY · VERIFIED</div></div>
     <section className="grid">
       <div className="card"><div className="metric-label">Ledger Model</div><div className="metric">DOUBLE-ENTRY</div><div className="metric-note">Explicit debit / credit entries</div></div>
       <div className="card"><div className="metric-label">Money Arithmetic</div><div className="metric">INTEGER</div><div className="metric-note">Minor units via BigInt</div></div>
-      <div className="card"><div className="metric-label">Idempotency</div><div className="metric">ENABLED</div><div className="metric-note">Unique request keys</div></div>
+      <div className="card"><div className="metric-label">Balance Check</div><div className="metric">STRICT</div><div className="metric-note">Debits must equal credits</div></div>
       <div className="card"><div className="metric-label">Live Custody</div><div className="metric">DISABLED</div><div className="metric-note">No signing or settlement</div></div>
     </section>
     <section className="workspace">
@@ -42,10 +42,10 @@ export default function FinancialCorePage() {
         {message && <div className="empty-state">{message}</div>}
       </div>
       <div className="card"><div className="card-title"><span>Financial Controls</span><span className="badge">SERVER REQUIRED</span></div>
-        <div className="list"><div className="list-row"><span className="muted">Journal entries</span><strong>{entries || "—"}</strong></div><div className="list-row"><span className="muted">Idempotency key</span><strong className="mono">{key}</strong></div><div className="list-row"><span className="muted">Client balance editing</span><strong>Disabled</strong></div><div className="list-row"><span className="muted">Custody signing</span><strong>Disabled</strong></div></div>
+        <div className="list"><div className="list-row"><span className="muted">Journal entries</span><strong>{entries || "—"}</strong></div><div className="list-row"><span className="muted">Example posting</span><strong>DEBIT / CREDIT</strong></div><div className="list-row"><span className="muted">Idempotency key</span><strong className="mono">{key}</strong></div><div className="list-row"><span className="muted">Client balance editing</span><strong>Disabled</strong></div></div>
       </div>
     </section>
-    <section className="card"><div className="card-title"><span>Production Requirements</span><span className="badge">NOT YET LIVE</span></div><div className="list"><div className="list-row"><span>Atomic database transactions</span><strong>Required</strong></div><div className="list-row"><span>Database migrations and backups</span><strong>Required</strong></div><div className="list-row"><span>Server-side authorization</span><strong>Required</strong></div><div className="list-row"><span>Custody provider</span><strong>Phase 14</strong></div><div className="list-row"><span>Deposit / withdrawal settlement</span><strong>Phase 13–15</strong></div></div></section>
-    <p className="footer-note">Phase 12 establishes the database and accounting model. The browser never receives database credentials and this page does not post real financial transactions.</p>
+    <section className="card"><div className="card-title"><span>Production Requirements</span><span className="badge">NOT YET LIVE</span></div><div className="list"><div className="list-row"><span>Atomic database transactions</span><strong>Required</strong></div><div className="list-row"><span>Database migrations and backups</span><strong>Required</strong></div><div className="list-row"><span>Server-side authorization</span><strong>Required</strong></div><div className="list-row"><span>Custody provider</span><strong>Phase 14</strong></div><div className="list-row"><span>Blockchain settlement</span><strong>Phase 15</strong></div></div></section>
+    <p className="footer-note">The ledger validator now explicitly verifies debit/credit equality per currency. Browser validation remains research-only and does not post real financial transactions.</p>
   </main>;
 }
