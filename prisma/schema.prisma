@@ -11,65 +11,66 @@ enum UserRole { USER SUPPORT COMPLIANCE FINANCE ADMIN SUPER_ADMIN }
 enum AccountStatus { ACTIVE SUSPENDED CLOSED }
 enum LedgerAccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE }
 enum JournalStatus { POSTED VOIDED }
-
+enum EntryDirection { DEBIT CREDIT }
 enum CurrencyType { FIAT CRYPTO }
 
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  passwordHash    String
-  role            UserRole         @default(USER)
-  emailVerifiedAt DateTime?
-  twoFactorEnabled Boolean         @default(false)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  accounts        FinancialAccount[]
-  auditEvents     AuditEvent[]
+  id               String             @id @default(cuid())
+  email            String             @unique
+  passwordHash     String
+  role             UserRole           @default(USER)
+  emailVerifiedAt  DateTime?
+  twoFactorEnabled Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  accounts         FinancialAccount[]
+  auditEvents      AuditEvent[]
 }
 
 model FinancialAccount {
-  id          String        @id @default(cuid())
-  userId      String
-  assetCode   String
-  assetType   CurrencyType
-  status      AccountStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  user        User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  ledger      LedgerAccount?
+  id        String        @id @default(cuid())
+  userId    String
+  assetCode String
+  assetType CurrencyType
+  status    AccountStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  ledger    LedgerAccount?
   @@unique([userId, assetCode])
   @@index([userId])
 }
 
 model LedgerAccount {
-  id          String            @id @default(cuid())
-  accountId   String            @unique
-  type        LedgerAccountType
-  currency    String
-  createdAt   DateTime          @default(now())
-  account    FinancialAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  entries    LedgerEntry[]
+  id        String            @id @default(cuid())
+  accountId String            @unique
+  type      LedgerAccountType
+  currency  String
+  createdAt DateTime          @default(now())
+  account   FinancialAccount  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  entries   LedgerEntry[]
 }
 
 model JournalTransaction {
-  id            String          @id @default(cuid())
-  reference     String          @unique
-  description   String
-  status        JournalStatus   @default(POSTED)
-  idempotencyKey String         @unique
-  createdAt     DateTime        @default(now())
-  entries       LedgerEntry[]
+  id             String          @id @default(cuid())
+  reference      String          @unique
+  description    String
+  status         JournalStatus   @default(POSTED)
+  idempotencyKey String          @unique
+  createdAt      DateTime        @default(now())
+  entries        LedgerEntry[]
 }
 
 model LedgerEntry {
-  id            String             @id @default(cuid())
-  journalId     String
+  id              String             @id @default(cuid())
+  journalId       String
   ledgerAccountId String
-  amountMinor   BigInt
-  currency      String
-  createdAt     DateTime           @default(now())
-  journal       JournalTransaction @relation(fields: [journalId], references: [id], onDelete: Restrict)
-  ledgerAccount LedgerAccount      @relation(fields: [ledgerAccountId], references: [id], onDelete: Restrict)
+  direction       EntryDirection
+  amountMinor     BigInt
+  currency        String
+  createdAt       DateTime           @default(now())
+  journal         JournalTransaction @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  ledgerAccount   LedgerAccount      @relation(fields: [ledgerAccountId], references: [id], onDelete: Restrict)
   @@index([journalId])
   @@index([ledgerAccountId, currency])
 }
