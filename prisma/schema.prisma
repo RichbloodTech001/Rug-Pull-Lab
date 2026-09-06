@@ -13,6 +13,8 @@ enum LedgerAccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE }
 enum JournalStatus { POSTED VOIDED }
 enum EntryDirection { DEBIT CREDIT }
 enum CurrencyType { FIAT CRYPTO }
+enum TransactionKind { DEPOSIT WITHDRAWAL FEE ADJUSTMENT }
+enum TransactionStatus { PENDING PROCESSING AWAITING_APPROVAL CONFIRMED FAILED CANCELLED REVERSED }
 
 model User {
   id               String             @id @default(cuid())
@@ -25,6 +27,7 @@ model User {
   updatedAt        DateTime           @updatedAt
   accounts         FinancialAccount[]
   auditEvents      AuditEvent[]
+  transactions     PaymentTransaction[]
 }
 
 model FinancialAccount {
@@ -37,6 +40,7 @@ model FinancialAccount {
   updatedAt DateTime      @updatedAt
   user      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   ledger    LedgerAccount?
+  transactions PaymentTransaction[]
   @@unique([userId, assetCode])
   @@index([userId])
 }
@@ -59,6 +63,7 @@ model JournalTransaction {
   idempotencyKey String          @unique
   createdAt      DateTime        @default(now())
   entries        LedgerEntry[]
+  payment        PaymentTransaction?
 }
 
 model LedgerEntry {
@@ -73,6 +78,42 @@ model LedgerEntry {
   ledgerAccount   LedgerAccount      @relation(fields: [ledgerAccountId], references: [id], onDelete: Restrict)
   @@index([journalId])
   @@index([ledgerAccountId, currency])
+}
+
+model PaymentTransaction {
+  id                String             @id @default(cuid())
+  userId            String
+  accountId         String
+  kind              TransactionKind
+  status            TransactionStatus @default(PENDING)
+  amountMinor       BigInt
+  feeMinor          BigInt             @default(0)
+  currency          String
+  idempotencyKey    String             @unique
+  externalReference String?
+  journalId         String?            @unique
+  failureReason     String?
+  metadata          Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  account           FinancialAccount   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  journal           JournalTransaction? @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  fees              PaymentFee[]
+  @@index([userId, createdAt])
+  @@index([accountId, status])
+  @@index([externalReference])
+}
+
+model PaymentFee {
+  id            String             @id @default(cuid())
+  transactionId String
+  amountMinor   BigInt
+  currency      String
+  code          String
+  createdAt     DateTime           @default(now())
+  transaction   PaymentTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  @@index([transactionId])
 }
 
 model AuditEvent {
