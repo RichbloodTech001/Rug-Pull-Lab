@@ -27,9 +27,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const requestedStatus = url.searchParams.get("status")?.toUpperCase() || "AWAITING_APPROVAL";
     const allowedStatuses = new Set(Object.values(TransactionStatus));
-    if (!allowedStatuses.has(requestedStatus as TransactionStatus)) {
-      return NextResponse.json({ error: "Invalid transaction status." }, { status: 400 });
-    }
+    if (!allowedStatuses.has(requestedStatus as TransactionStatus)) return NextResponse.json({ error: "Invalid transaction status." }, { status: 400 });
 
     const page = Math.max(1, Number(url.searchParams.get("page") || "1") || 1);
     const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get("pageSize") || "20") || 20));
@@ -53,9 +51,8 @@ export async function GET(request: Request) {
           failureReason: true,
           createdAt: true,
           updatedAt: true,
-          user: { select: { id: true, email: true } },
-          account: { select: { id: true, assetCode: true, assetType: true, status: true } },
           user: { select: { id: true, email: true, complianceProfile: true } },
+          account: { select: { id: true, assetCode: true, assetType: true, status: true } },
         },
       }),
     ]);
@@ -83,26 +80,18 @@ export async function POST(request: Request) {
     const transactionId = requireText(body.transactionId, "transactionId", 128);
     const decision = requireText(body.decision, "decision", 16).toUpperCase();
     const reason = body.reason === undefined ? undefined : requireText(body.reason, "reason", 512);
-
     if (decision !== "APPROVE" && decision !== "REJECT") throw new Error("Decision must be APPROVE or REJECT.");
 
     const payment = await prisma.paymentTransaction.findUnique({ where: { id: transactionId } });
     if (!payment) return NextResponse.json({ error: "Transaction was not found." }, { status: 404 });
-    if (payment.status !== TransactionStatus.AWAITING_APPROVAL) {
-      return NextResponse.json({ error: "Only awaiting-approval transactions can be reviewed." }, { status: 409 });
-    }
+    if (payment.status !== TransactionStatus.AWAITING_APPROVAL) return NextResponse.json({ error: "Only awaiting-approval transactions can be reviewed." }, { status: 409 });
 
     if (decision === "REJECT") {
       const rejected = await prisma.$transaction(async (tx) => {
-        const result = await tx.paymentTransaction.updateMany({
-          where: { id: payment.id, status: TransactionStatus.AWAITING_APPROVAL },
-          data: { status: TransactionStatus.CANCELLED, failureReason: reason ?? "Rejected by finance." },
-        });
+        const result = await tx.paymentTransaction.updateMany({ where: { id: payment.id, status: TransactionStatus.AWAITING_APPROVAL }, data: { status: TransactionStatus.CANCELLED, failureReason: reason ?? "Rejected by finance." } });
         if (result.count !== 1) throw new Error("Transaction state changed before rejection could be applied.");
         const updated = await tx.paymentTransaction.findUniqueOrThrow({ where: { id: payment.id } });
-        await tx.auditEvent.create({
-          data: { userId: actor.id, action: "PAYMENT_REJECTED", target: payment.id, metadata: { reason: reason ?? "Rejected by finance." } },
-        });
+        await tx.auditEvent.create({ data: { userId: actor.id, action: "PAYMENT_REJECTED", target: payment.id, metadata: { reason: reason ?? "Rejected by finance." } } });
         return updated;
       });
       return NextResponse.json({ ok: true, transaction: serializeTransaction(rejected) });
@@ -112,10 +101,7 @@ export async function POST(request: Request) {
     startOfDay.setHours(0, 0, 0, 0);
     const [profile, dailyVolume, recentAttempts, failedAttempts] = await Promise.all([
       prisma.complianceProfile.findUnique({ where: { userId: payment.userId } }),
-      prisma.paymentTransaction.aggregate({
-        where: { userId: payment.userId, currency: payment.currency, kind: payment.kind, status: TransactionStatus.CONFIRMED, createdAt: { gte: startOfDay } },
-        _sum: { amountMinor: true },
-      }),
+      prisma.paymentTransaction.aggregate({ where: { userId: payment.userId, currency: payment.currency, kind: payment.kind, status: TransactionStatus.CONFIRMED, createdAt: { gte: startOfDay } }, _sum: { amountMinor: true } }),
       prisma.paymentTransaction.count({ where: { userId: payment.userId, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } } }),
       prisma.paymentTransaction.count({ where: { userId: payment.userId, status: TransactionStatus.FAILED, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
     ]);
