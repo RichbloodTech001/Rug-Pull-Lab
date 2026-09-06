@@ -213,6 +213,7 @@ model ReconciliationRecord {
   reference String
   source String
   externalReference String?
+  idempotencyKey String @unique
   assetCode String
   amountMinor BigInt
   status ReconciliationStatus @default(MATCHED)
