@@ -24,6 +24,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Prisma schema validation
         run: npm run prisma:validate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rug_pull_lab?schema=public
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
