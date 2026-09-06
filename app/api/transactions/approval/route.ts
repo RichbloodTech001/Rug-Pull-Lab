@@ -46,10 +46,16 @@ export async function POST(request: Request) {
 
     if (decision === "REJECT") {
       const rejected = await prisma.$transaction(async (tx) => {
-        const updated = await tx.paymentTransaction.update({
+        const result = await tx.paymentTransaction.updateMany({
           where: { id: payment.id, status: TransactionStatus.AWAITING_APPROVAL },
           data: { status: TransactionStatus.CANCELLED, failureReason: reason ?? "Rejected by finance." },
         });
+
+        if (result.count !== 1) {
+          throw new Error("Transaction state changed before rejection could be applied.");
+        }
+
+        const updated = await tx.paymentTransaction.findUniqueOrThrow({ where: { id: payment.id } });
         await tx.auditEvent.create({
           data: {
             userId: actor.id,
