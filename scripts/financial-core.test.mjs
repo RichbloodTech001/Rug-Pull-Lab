@@ -56,11 +56,11 @@ test("risk scoring reviews elevated activity", () => {
     dailyLimitMinor: 0n,
     recentAttempts: 8,
     failedAttempts: 0,
-    destinationNew: false,
+    destinationNew: true,
     complianceDecision: "ALLOW",
   });
   assert.equal(result.decision, "REVIEW");
-  assert.ok(result.score >= 25);
+  assert.ok(result.score >= 40);
 });
 
 test("velocity remaining never becomes negative", () => {
