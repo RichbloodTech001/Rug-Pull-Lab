@@ -4,16 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { assertSameOrigin } from "@/lib/server-auth";
 import { requireFinance } from "@/lib/server-rbac";
 import { postApprovedPayment, FinancialPostingError } from "@/lib/financial-posting";
+import { gateTransaction } from "@/lib/transaction-gate";
 import { parseJsonObject, requireText } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 function serializeTransaction<T extends { amountMinor: bigint; feeMinor: bigint }>(transaction: T) {
-  return {
-    ...transaction,
-    amountMinor: transaction.amountMinor.toString(),
-    feeMinor: transaction.feeMinor.toString(),
-  };
+  return { ...transaction, amountMinor: transaction.amountMinor.toString(), feeMinor: transaction.feeMinor.toString() };
 }
 
 function errorStatus(error: unknown) {
@@ -33,13 +30,10 @@ export async function POST(request: Request) {
     const decision = requireText(body.decision, "decision", 16).toUpperCase();
     const reason = body.reason === undefined ? undefined : requireText(body.reason, "reason", 512);
 
-    if (decision !== "APPROVE" && decision !== "REJECT") {
-      throw new Error("Decision must be APPROVE or REJECT.");
-    }
+    if (decision !== "APPROVE" && decision !== "REJECT") throw new Error("Decision must be APPROVE or REJECT.");
 
     const payment = await prisma.paymentTransaction.findUnique({ where: { id: transactionId } });
     if (!payment) return NextResponse.json({ error: "Transaction was not found." }, { status: 404 });
-
     if (payment.status !== TransactionStatus.AWAITING_APPROVAL) {
       return NextResponse.json({ error: "Only awaiting-approval transactions can be reviewed." }, { status: 409 });
     }
@@ -50,27 +44,80 @@ export async function POST(request: Request) {
           where: { id: payment.id, status: TransactionStatus.AWAITING_APPROVAL },
           data: { status: TransactionStatus.CANCELLED, failureReason: reason ?? "Rejected by finance." },
         });
-
-        if (result.count !== 1) {
-          throw new Error("Transaction state changed before rejection could be applied.");
-        }
-
+        if (result.count !== 1) throw new Error("Transaction state changed before rejection could be applied.");
         const updated = await tx.paymentTransaction.findUniqueOrThrow({ where: { id: payment.id } });
         await tx.auditEvent.create({
-          data: {
-            userId: actor.id,
-            action: "PAYMENT_REJECTED",
-            target: payment.id,
-            metadata: { reason: reason ?? "Rejected by finance." },
-          },
+          data: { userId: actor.id, action: "PAYMENT_REJECTED", target: payment.id, metadata: { reason: reason ?? "Rejected by finance." } },
         });
         return updated;
       });
       return NextResponse.json({ ok: true, transaction: serializeTransaction(rejected) });
     }
 
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const [profile, dailyVolume, recentAttempts, failedAttempts] = await Promise.all([
+      prisma.complianceProfile.findUnique({ where: { userId: payment.userId } }),
+      prisma.paymentTransaction.aggregate({
+        where: {
+          userId: payment.userId,
+          currency: payment.currency,
+          kind: payment.kind,
+          status: TransactionStatus.CONFIRMED,
+          createdAt: { gte: startOfDay },
+        },
+        _sum: { amountMinor: true },
+      }),
+      prisma.paymentTransaction.count({
+        where: { userId: payment.userId, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
+      }),
+      prisma.paymentTransaction.count({
+        where: { userId: payment.userId, status: TransactionStatus.FAILED, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+      }),
+    ]);
+
+    const gate = gateTransaction({
+      amountMinor: payment.amountMinor,
+      currency: payment.currency,
+      dailyVolumeMinor: dailyVolume._sum.amountMinor ?? 0n,
+      dailyLimitMinor: 0n,
+      recentAttempts,
+      failedAttempts,
+      destinationNew: false,
+      profile: profile ? {
+        userId: profile.userId,
+        kyc: profile.kyc,
+        kyb: profile.kyb,
+        sanctions: profile.sanctions,
+        pep: profile.pep,
+        sourceOfFunds: profile.sourceOfFunds,
+        riskTier: profile.riskTier,
+      } : undefined,
+    });
+
+    if (!gate.allowedToPost) {
+      await prisma.auditEvent.create({
+        data: {
+          userId: actor.id,
+          action: "PAYMENT_POSTING_BLOCKED_BY_RISK_GATE",
+          target: payment.id,
+          metadata: {
+            complianceDecision: gate.complianceDecision,
+            riskDecision: gate.risk.decision,
+            riskScore: gate.risk.score,
+            reason: gate.reason,
+            signals: gate.risk.signals,
+          },
+        },
+      });
+      return NextResponse.json({
+        error: "Transaction cannot be posted until the compliance and risk gates allow it.",
+        gate: { complianceDecision: gate.complianceDecision, riskDecision: gate.risk.decision, riskScore: gate.risk.score, reason: gate.reason, signals: gate.risk.signals },
+      }, { status: 409 });
+    }
+
     const approved = await postApprovedPayment(payment.id, actor.id);
-    return NextResponse.json({ ok: true, transaction: serializeTransaction(approved) });
+    return NextResponse.json({ ok: true, transaction: serializeTransaction(approved), gate });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to review transaction.";
     return NextResponse.json({ error: message }, { status: errorStatus(error) });
