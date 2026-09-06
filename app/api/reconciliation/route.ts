@@ -5,14 +5,25 @@ import { parseJsonObject, requireIdempotencyKey, requirePositiveMinorUnit, requi
 
 export const dynamic = "force-dynamic";
 
+function serializeRecord<T extends { amountMinor: bigint; varianceMinor: bigint }>(record: T) {
+  return { ...record, amountMinor: record.amountMinor.toString(), varianceMinor: record.varianceMinor.toString() };
+}
+
+function errorStatus(error: unknown) {
+  const message = error instanceof Error ? error.message : "Request failed.";
+  if (message === "Authentication is required.") return 401;
+  if (message.includes("not authorized") || message.includes("role is not permitted")) return 403;
+  return 400;
+}
+
 export async function GET() {
   try {
     await requireCompliance();
     const records = await prisma.reconciliationRecord.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
-    return NextResponse.json({ ok: true, records });
+    return NextResponse.json({ ok: true, records: records.map(serializeRecord) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load reconciliation records.";
-    return NextResponse.json({ error: message }, { status: message.includes("required") || message.includes("authorized") ? 403 : 500 });
+    return NextResponse.json({ error: message }, { status: errorStatus(error) });
   }
 }
 
@@ -27,12 +38,12 @@ export async function POST(request: Request) {
     const idempotencyKey = requireIdempotencyKey(body.idempotencyKey);
     const externalReference = body.externalReference === undefined ? undefined : requireText(body.externalReference, "externalReference", 256);
 
-    const existing = await prisma.reconciliationRecord.findFirst({ where: { reference } });
-    if (existing) return NextResponse.json({ ok: true, record: existing, idempotent: true });
+    const existing = await prisma.reconciliationRecord.findUnique({ where: { idempotencyKey } });
+    if (existing) return NextResponse.json({ ok: true, record: serializeRecord(existing), idempotent: true });
 
     const record = await prisma.$transaction(async (tx) => {
       const created = await tx.reconciliationRecord.create({
-        data: { reference, source, assetCode, amountMinor, externalReference },
+        data: { reference, source, assetCode, amountMinor, externalReference, idempotencyKey },
       });
       await tx.auditEvent.create({
         data: {
@@ -44,9 +55,9 @@ export async function POST(request: Request) {
       });
       return created;
     });
-    return NextResponse.json({ ok: true, record }, { status: 201 });
+    return NextResponse.json({ ok: true, record: serializeRecord(record) }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create reconciliation record.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: message }, { status: errorStatus(error) });
   }
 }
