@@ -26,6 +26,8 @@ jobs:
         run: npm run prisma:validate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/rug_pull_lab?schema=public
+      - name: Financial core tests
+        run: npm run test:financial
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
