@@ -9,7 +9,9 @@ export type CustodyPolicy = {
   signingEnabled: boolean;
   requireTwoPersonApproval: boolean;
   allowlistedOnly: boolean;
+  allowlistedDestinations: string[];
   dailyLimitMinor: bigint;
+  dailyVolumeMinor: bigint;
   highValueThresholdMinor: bigint;
 };
 
@@ -31,7 +33,9 @@ export function defaultCustodyPolicy(): CustodyPolicy {
     signingEnabled: false,
     requireTwoPersonApproval: true,
     allowlistedOnly: true,
+    allowlistedDestinations: [],
     dailyLimitMinor: 0n,
+    dailyVolumeMinor: 0n,
     highValueThresholdMinor: 0n,
   };
 }
@@ -47,11 +51,16 @@ export function evaluateCustodyRequest(policy: CustodyPolicy, input: Omit<Custod
   if (!input.assetCode.trim()) throw new Error("Asset code is required.");
   if (!input.destination.trim()) throw new Error("Destination is required.");
   if (input.amountMinor <= 0n) throw new Error("Custody amount must be positive.");
+  if (policy.dailyLimitMinor < 0n || policy.dailyVolumeMinor < 0n) throw new Error("Daily custody limits cannot be negative.");
 
   const approvalTier = classifyApproval(input.amountMinor, policy.highValueThresholdMinor);
-  const ready = policy.enabled && policy.provider !== "UNCONFIGURED" && policy.environment === "SANDBOX" && !policy.signingEnabled;
+  const exceedsDailyLimit = policy.dailyLimitMinor > 0n && policy.dailyVolumeMinor + input.amountMinor > policy.dailyLimitMinor;
+  const destinationAllowed = !policy.allowlistedOnly || policy.allowlistedDestinations.includes(input.destination.trim());
+  const ready = policy.enabled && policy.provider !== "UNCONFIGURED" && policy.environment === "SANDBOX" && !policy.signingEnabled && !exceedsDailyLimit && destinationAllowed;
+
   return {
     ...input,
+    destination: input.destination.trim(),
     id: crypto.randomUUID(),
     approvalTier: approvalTier === "HIGH_VALUE" ? "MANUAL_REVIEW" : approvalTier,
     status: ready ? "READY_FOR_PROVIDER" : "BLOCKED",
