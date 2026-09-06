@@ -1,6 +1,6 @@
 {
   "name": "rug-pull-lab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "lucide-react": "^0.468.0",
     "next": "^14.2.35",
