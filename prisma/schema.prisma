@@ -83,6 +83,27 @@ enum IncidentStatus {
   RESOLVED
 }
 
+enum VerificationStatus {
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum ComplianceRiskTier {
+  LOW
+  MEDIUM
+  HIGH
+  PROHIBITED
+}
+
+enum ScreeningStatus {
+  CLEAR
+  MATCH
+  PENDING
+}
+
 model User {
   id String @id @default(cuid())
   email String @unique
@@ -97,6 +118,7 @@ model User {
   auditEvents AuditEvent[]
   transactions PaymentTransaction[]
   incidents Incident[]
+  complianceProfile ComplianceProfile?
 }
 
 model Session {
@@ -109,6 +131,23 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, expiresAt])
   @@index([expiresAt])
+}
+
+model ComplianceProfile {
+  id String @id @default(cuid())
+  userId String @unique
+  kyc VerificationStatus @default(NOT_STARTED)
+  kyb VerificationStatus @default(NOT_STARTED)
+  sanctions ScreeningStatus @default(PENDING)
+  pep ScreeningStatus @default(PENDING)
+  sourceOfFunds VerificationStatus @default(NOT_STARTED)
+  riskTier ComplianceRiskTier @default(MEDIUM)
+  reviewedAt DateTime?
+  reviewedById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([riskTier, updatedAt])
 }
 
 model FinancialAccount {
