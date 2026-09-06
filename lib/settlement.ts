@@ -1,59 +1,8 @@
 export type SettlementStatus = "QUEUED" | "SUBMITTED" | "CONFIRMING" | "CONFIRMED" | "FAILED" | "REORGED";
 export type SettlementNetwork = "LOCALNET" | "DEVNET";
-
-export type SettlementRecord = {
-  id: string;
-  transactionReference: string;
-  network: SettlementNetwork;
-  assetCode: string;
-  amountMinor: bigint;
-  providerReference?: string;
-  txSignature?: string;
-  confirmations: number;
-  requiredConfirmations: number;
-  status: SettlementStatus;
-  createdAt: string;
-  updatedAt: string;
-};
-
-const transitions: Record<SettlementStatus, SettlementStatus[]> = {
-  QUEUED: ["SUBMITTED", "FAILED"],
-  SUBMITTED: ["CONFIRMING", "FAILED", "REORGED"],
-  CONFIRMING: ["CONFIRMED", "FAILED", "REORGED"],
-  CONFIRMED: ["REORGED"],
-  FAILED: [],
-  REORGED: ["CONFIRMING", "FAILED"],
-};
-
-export function canTransitionSettlement(from: SettlementStatus, to: SettlementStatus) {
-  return transitions[from].includes(to);
-}
-
-export function transitionSettlement(record: SettlementRecord, next: SettlementStatus, patch: Partial<SettlementRecord> = {}): SettlementRecord {
-  if (record.status === next) return { ...record, ...patch, updatedAt: new Date().toISOString() };
-  if (!canTransitionSettlement(record.status, next)) throw new Error(`Invalid settlement transition: ${record.status} -> ${next}`);
-  return { ...record, ...patch, status: next, updatedAt: new Date().toISOString() };
-}
-
-export function applyConfirmation(record: SettlementRecord, confirmations: number): SettlementRecord {
-  if (!Number.isInteger(confirmations) || confirmations < 0) throw new Error("Confirmations must be a non-negative integer.");
-  const nextStatus = confirmations >= record.requiredConfirmations ? "CONFIRMED" : "CONFIRMING";
-  if (record.status === "CONFIRMED" && confirmations < record.requiredConfirmations) {
-    return transitionSettlement(record, "REORGED", { confirmations });
-  }
-  if (record.status === "SUBMITTED" && confirmations > 0) {
-    return transitionSettlement(record, "CONFIRMING", { confirmations });
-  }
-  if (record.status === "CONFIRMING" && nextStatus === "CONFIRMED") {
-    return transitionSettlement(record, "CONFIRMED", { confirmations });
-  }
-  return { ...record, confirmations, updatedAt: new Date().toISOString() };
-}
-
-export function createSettlement(input: Omit<SettlementRecord, "id" | "status" | "confirmations" | "createdAt" | "updatedAt">): SettlementRecord {
-  if (!input.transactionReference.trim()) throw new Error("Transaction reference is required.");
-  if (!input.assetCode.trim()) throw new Error("Asset code is required.");
-  if (input.amountMinor <= 0n) throw new Error("Settlement amount must be positive.");
-  if (!Number.isInteger(input.requiredConfirmations) || input.requiredConfirmations < 1) throw new Error("Required confirmations must be at least one.");
-  return { ...input, id: crypto.randomUUID(), status: "QUEUED", confirmations: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-}
+export type SettlementRecord = { id: string; transactionReference: string; network: SettlementNetwork; assetCode: string; amountMinor: bigint; providerReference?: string; txSignature?: string; confirmations: number; requiredConfirmations: number; status: SettlementStatus; createdAt: string; updatedAt: string };
+const transitions: Record<SettlementStatus, SettlementStatus[]> = { QUEUED: ["SUBMITTED", "FAILED"], SUBMITTED: ["CONFIRMING", "FAILED", "REORGED"], CONFIRMING: ["CONFIRMED", "FAILED", "REORGED"], CONFIRMED: ["REORGED"], FAILED: [], REORGED: ["CONFIRMING", "FAILED"] };
+export function canTransitionSettlement(from: SettlementStatus, to: SettlementStatus) { return transitions[from].includes(to); }
+export function transitionSettlement(record: SettlementRecord, next: SettlementStatus, patch: Partial<SettlementRecord> = {}) { if (record.status === next) return { ...record, ...patch, updatedAt: new Date().toISOString() }; if (!canTransitionSettlement(record.status, next)) throw new Error(`Invalid settlement transition: ${record.status} -> ${next}`); return { ...record, ...patch, status: next, updatedAt: new Date().toISOString() }; }
+export function applyConfirmation(record: SettlementRecord, confirmations: number) { if (!Number.isInteger(confirmations) || confirmations < 0) throw new Error("Confirmations must be a non-negative integer."); const nextStatus = confirmations >= record.requiredConfirmations ? "CONFIRMED" : "CONFIRMING"; if (record.status === "CONFIRMED" && confirmations < record.requiredConfirmations) return transitionSettlement(record, "REORGED", { confirmations }); if (record.status === "SUBMITTED" && confirmations > 0) return transitionSettlement(record, "CONFIRMING", { confirmations }); if (record.status === "CONFIRMING" && nextStatus === "CONFIRMED") return transitionSettlement(record, "CONFIRMED", { confirmations }); return { ...record, confirmations, updatedAt: new Date().toISOString() }; }
+export function createSettlement(input: Omit<SettlementRecord, "id" | "status" | "confirmations" | "createdAt" | "updatedAt">): SettlementRecord { if (!input.transactionReference.trim()) throw new Error("Transaction reference is required."); if (!input.assetCode.trim()) throw new Error("Asset code is required."); if (input.amountMinor <= 0n) throw new Error("Settlement amount must be positive."); if (!Number.isInteger(input.requiredConfirmations) || input.requiredConfirmations < 1) throw new Error("Required confirmations must be at least one."); return { ...input, id: crypto.randomUUID(), status: "QUEUED", confirmations: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; }
