@@ -7,17 +7,81 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole { USER SUPPORT COMPLIANCE FINANCE ADMIN SUPER_ADMIN }
-enum AccountStatus { ACTIVE SUSPENDED CLOSED }
-enum LedgerAccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE }
-enum JournalStatus { POSTED VOIDED }
-enum EntryDirection { DEBIT CREDIT }
-enum CurrencyType { FIAT CRYPTO }
-enum TransactionKind { DEPOSIT WITHDRAWAL FEE ADJUSTMENT }
-enum TransactionStatus { PENDING PROCESSING AWAITING_APPROVAL CONFIRMED FAILED CANCELLED REVERSED }
-enum ReconciliationStatus { MATCHED MISMATCH MISSING_COUNTERPARTY DUPLICATE }
-enum IncidentSeverity { LOW MEDIUM HIGH CRITICAL }
-enum IncidentStatus { OPEN INVESTIGATING CONTAINED RESOLVED }
+enum UserRole {
+  USER
+  SUPPORT
+  COMPLIANCE
+  FINANCE
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum JournalStatus {
+  POSTED
+  VOIDED
+}
+
+enum EntryDirection {
+  DEBIT
+  CREDIT
+}
+
+enum CurrencyType {
+  FIAT
+  CRYPTO
+}
+
+enum TransactionKind {
+  DEPOSIT
+  WITHDRAWAL
+  FEE
+  ADJUSTMENT
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  AWAITING_APPROVAL
+  CONFIRMED
+  FAILED
+  CANCELLED
+  REVERSED
+}
+
+enum ReconciliationStatus {
+  MATCHED
+  MISMATCH
+  MISSING_COUNTERPARTY
+  DUPLICATE
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  CONTAINED
+  RESOLVED
+}
 
 model User {
   id String @id @default(cuid())
