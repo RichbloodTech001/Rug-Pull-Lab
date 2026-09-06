@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+coverage/
+
+# Secrets and wallet material
+*.pem
+*.key
+*.seed
+*.secret
+id.json
+wallet.json
