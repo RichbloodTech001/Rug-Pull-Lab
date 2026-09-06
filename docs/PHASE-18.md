@@ -4,11 +4,11 @@ Phase 18 introduces deterministic reconciliation between internal ledger observa
 
 ## Added
 - Cross-source record comparison
-- Asset and amount variance detection
+- Reference, asset and amount variance detection
 - Missing-counterparty detection
 - Duplicate-reference detection
 - Reconciliation summary helper
-- Reconciliation Control UI at `/reconciliation`
+- Controlled exception workflow in the UI
 
 ## Production requirements
 External records must be independently verified and matched idempotently. Exceptions should create controlled cases rather than silently changing balances. Corrections must use authorized ledger journals with complete audit evidence.
