@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:financial": "node --experimental-strip-types --test scripts/financial-core.test.mjs",
     "prisma:validate": "prisma validate --schema prisma/schema.prisma"
   },
   "dependencies": {
