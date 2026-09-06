@@ -27,10 +27,10 @@ export async function POST(request: Request) {
     const body = parseJsonObject(await request.json());
     const action = requireText(body.action, "action", 128);
     const target = requireText(body.target, "target", 256);
-    const metadata = body.metadata === undefined ? undefined : body.metadata;
+    const metadata = body.metadata === undefined ? undefined : body.metadata === null ? undefined : body.metadata;
 
     const event = await prisma.auditEvent.create({
-      data: { userId: user.id, action, target, metadata },
+      data: { userId: user.id, action, target, ...(metadata === undefined ? {} : { metadata }) },
     });
     return NextResponse.json({ ok: true, event }, { status: 201 });
   } catch (error) {
