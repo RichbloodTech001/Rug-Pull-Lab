@@ -21,6 +21,60 @@ function errorStatus(error: unknown) {
   return 400;
 }
 
+export async function GET(request: Request) {
+  try {
+    const actor = await requireFinance();
+    const url = new URL(request.url);
+    const requestedStatus = url.searchParams.get("status")?.toUpperCase() || "AWAITING_APPROVAL";
+    const allowedStatuses = new Set(Object.values(TransactionStatus));
+    if (!allowedStatuses.has(requestedStatus as TransactionStatus)) {
+      return NextResponse.json({ error: "Invalid transaction status." }, { status: 400 });
+    }
+
+    const page = Math.max(1, Number(url.searchParams.get("page") || "1") || 1);
+    const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get("pageSize") || "20") || 20));
+    const where = { status: requestedStatus as TransactionStatus };
+    const [total, transactions] = await prisma.$transaction([
+      prisma.paymentTransaction.count({ where }),
+      prisma.paymentTransaction.findMany({
+        where,
+        orderBy: { createdAt: "asc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          kind: true,
+          status: true,
+          amountMinor: true,
+          feeMinor: true,
+          currency: true,
+          idempotencyKey: true,
+          externalReference: true,
+          failureReason: true,
+          createdAt: true,
+          updatedAt: true,
+          user: { select: { id: true, email: true } },
+          account: { select: { id: true, assetCode: true, assetType: true, status: true } },
+          user: { select: { id: true, email: true, complianceProfile: true } },
+        },
+      }),
+    ]);
+
+    return NextResponse.json({
+      ok: true,
+      actorRole: actor.role,
+      page,
+      pageSize,
+      total,
+      hasNextPage: page * pageSize < total,
+      transactions: transactions.map((transaction) => serializeTransaction(transaction)),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to load approval queue.";
+    return NextResponse.json({ error: message }, { status: errorStatus(error) });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     assertSameOrigin();
@@ -59,21 +113,11 @@ export async function POST(request: Request) {
     const [profile, dailyVolume, recentAttempts, failedAttempts] = await Promise.all([
       prisma.complianceProfile.findUnique({ where: { userId: payment.userId } }),
       prisma.paymentTransaction.aggregate({
-        where: {
-          userId: payment.userId,
-          currency: payment.currency,
-          kind: payment.kind,
-          status: TransactionStatus.CONFIRMED,
-          createdAt: { gte: startOfDay },
-        },
+        where: { userId: payment.userId, currency: payment.currency, kind: payment.kind, status: TransactionStatus.CONFIRMED, createdAt: { gte: startOfDay } },
         _sum: { amountMinor: true },
       }),
-      prisma.paymentTransaction.count({
-        where: { userId: payment.userId, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
-      }),
-      prisma.paymentTransaction.count({
-        where: { userId: payment.userId, status: TransactionStatus.FAILED, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-      }),
+      prisma.paymentTransaction.count({ where: { userId: payment.userId, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } } }),
+      prisma.paymentTransaction.count({ where: { userId: payment.userId, status: TransactionStatus.FAILED, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } }),
     ]);
 
     const gate = gateTransaction({
@@ -84,36 +128,12 @@ export async function POST(request: Request) {
       recentAttempts,
       failedAttempts,
       destinationNew: false,
-      profile: profile ? {
-        userId: profile.userId,
-        kyc: profile.kyc,
-        kyb: profile.kyb,
-        sanctions: profile.sanctions,
-        pep: profile.pep,
-        sourceOfFunds: profile.sourceOfFunds,
-        riskTier: profile.riskTier,
-      } : undefined,
+      profile: profile ? { userId: profile.userId, kyc: profile.kyc, kyb: profile.kyb, sanctions: profile.sanctions, pep: profile.pep, sourceOfFunds: profile.sourceOfFunds, riskTier: profile.riskTier } : undefined,
     });
 
     if (!gate.allowedToPost) {
-      await prisma.auditEvent.create({
-        data: {
-          userId: actor.id,
-          action: "PAYMENT_POSTING_BLOCKED_BY_RISK_GATE",
-          target: payment.id,
-          metadata: {
-            complianceDecision: gate.complianceDecision,
-            riskDecision: gate.risk.decision,
-            riskScore: gate.risk.score,
-            reason: gate.reason,
-            signals: gate.risk.signals,
-          },
-        },
-      });
-      return NextResponse.json({
-        error: "Transaction cannot be posted until the compliance and risk gates allow it.",
-        gate: { complianceDecision: gate.complianceDecision, riskDecision: gate.risk.decision, riskScore: gate.risk.score, reason: gate.reason, signals: gate.risk.signals },
-      }, { status: 409 });
+      await prisma.auditEvent.create({ data: { userId: actor.id, action: "PAYMENT_POSTING_BLOCKED_BY_RISK_GATE", target: payment.id, metadata: { complianceDecision: gate.complianceDecision, riskDecision: gate.risk.decision, riskScore: gate.risk.score, reason: gate.reason, signals: gate.risk.signals } } });
+      return NextResponse.json({ error: "Transaction cannot be posted until the compliance and risk gates allow it.", gate: { complianceDecision: gate.complianceDecision, riskDecision: gate.risk.decision, riskScore: gate.risk.score, reason: gate.reason, signals: gate.risk.signals } }, { status: 409 });
     }
 
     const approved = await postApprovedPayment(payment.id, actor.id);
